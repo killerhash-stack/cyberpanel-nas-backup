@@ -67,78 +67,99 @@ sleep 2
 # REMOVE PAYWALL/ENTERPRISE CHECKS
 # ============================================================================
 
-log "Removing enterprise/paywall restrictions..."
+log "Removing admin-only restrictions..."
 
-# Find all Python files with enterprise checks
-log "Scanning for enterprise restrictions..."
-find /usr/local/CyberCP -type f -name "*.py" -exec grep -l "enterprise" {} \; > /tmp/enterprise_files.txt
+# The paywall actually checks currentACL['admin'] not enterprise!
+# We need to make these functions bypass admin checks
 
-# 1. Universal enterprise unlock - Replace all enterprise checks
-log "Applying universal enterprise unlock..."
+log "Scanning for admin-only restrictions..."
+
+# 1. Fix MySQL Manager and related database features
+if [ -f "/usr/local/CyberCP/databases/views.py" ]; then
+    log "Unlocking MySQL Manager..."
+    
+    # Replace admin checks with always-true conditions
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/databases/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/databases/views.py
+    
+    success "MySQL Manager unlocked"
+fi
+
+# 2. Fix Root File Manager  
+if [ -f "/usr/local/CyberCP/filemanager/views.py" ]; then
+    log "Unlocking Root File Manager..."
+    
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/filemanager/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/filemanager/views.py
+    
+    success "Root File Manager unlocked"
+fi
+
+# 3. Fix Mail Settings and Email features
+if [ -f "/usr/local/CyberCP/emailPremium/views.py" ]; then
+    log "Unlocking Email features (Mail Settings, Debugger)..."
+    
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/emailPremium/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/emailPremium/views.py
+    
+    success "Email features unlocked"
+fi
+
+# 4. Fix Mail Server (Rspamd, etc.)
+if [ -f "/usr/local/CyberCP/mailServer/views.py" ]; then
+    log "Unlocking Mail Server features..."
+    
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/mailServer/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/mailServer/views.py
+    
+    success "Mail Server features unlocked"
+fi
+
+# 5. Fix DNS features
+if [ -f "/usr/local/CyberCP/dns/views.py" ]; then
+    log "Unlocking DNS features..."
+    
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/dns/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/dns/views.py
+    
+    success "DNS features unlocked"
+fi
+
+if [ -f "/usr/local/CyberCP/dns/dnsManager.py" ]; then
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/dns/dnsManager.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/dns/dnsManager.py
+fi
+
+# 6. Fix Web Terminal
+if [ -f "/usr/local/CyberCP/WebTerminal/views.py" ]; then
+    log "Unlocking Web Terminal..."
+    
+    sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/WebTerminal/views.py
+    sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" /usr/local/CyberCP/WebTerminal/views.py
+    
+    success "Web Terminal unlocked"
+fi
+
+# 7. Universal scan for any other admin checks
+log "Scanning all files for remaining admin restrictions..."
+find /usr/local/CyberCP -type f -name "*.py" -exec grep -l "currentACL\['admin'\] == 1" {} \; > /tmp/admin_files.txt 2>/dev/null
+
 while IFS= read -r file; do
     if [ -f "$file" ]; then
-        # Method 1: Direct comparisons
-        sed -i 's/currentACL\[.enterprise.\] == 1/True/g' "$file"
-        sed -i 's/currentACL\[.enterprise.\] == 0/False/g' "$file"
-        sed -i "s/currentACL\['enterprise'\] == 1/True/g" "$file"
-        sed -i "s/currentACL\['enterprise'\] == 0/False/g" "$file"
-        
-        # Method 2: ACLManager checks
-        sed -i 's/ACLManager\.currentACL\.enterprise == 1/True/g' "$file"
-        sed -i 's/ACLManager\.currentACL\.enterprise == 0/False/g' "$file"
-        
-        # Method 3: If statements
-        sed -i 's/if currentACL\.enterprise == 1:/if True:/g' "$file"
-        sed -i 's/if ACLManager\.currentACL\.enterprise == 1:/if True:/g' "$file"
-        
-        # Method 4: Direct attribute access
-        sed -i 's/\.enterprise == 1/True/g' "$file"
-        sed -i 's/\.enterprise == 0/False/g' "$file"
+        sed -i "s/if currentACL\['admin'\] == 1:/if True:  # admin check bypassed/g" "$file"
+        sed -i "s/if currentACL\[\"admin\"\] == 1:/if True:  # admin check bypassed/g" "$file"
     fi
-done < /tmp/enterprise_files.txt
+done < /tmp/admin_files.txt
 
-success "Universal enterprise checks removed"
+success "All admin-only restrictions removed"
 
-# 2. Specifically target known locked features
-log "Unlocking MySQL Manager..."
-if [ -f "/usr/local/CyberCP/databases/views.py" ]; then
-    sed -i 's/enterprise/True  # enterprise/g' /usr/local/CyberCP/databases/views.py
+# Also check for enterprise checks (in case they exist)
+log "Checking for enterprise restrictions..."
+if grep -rq "enterprise" /usr/local/CyberCP/*.py 2>/dev/null; then
+    find /usr/local/CyberCP -type f -name "*.py" -exec sed -i 's/currentACL\[.enterprise.\] == 1/True/g' {} \;
+    find /usr/local/CyberCP -type f -name "*.py" -exec sed -i 's/ACLManager\.currentACL\.enterprise == 1/True/g' {} \;
+    success "Enterprise checks also removed"
 fi
-
-log "Unlocking Root File Manager..."
-if [ -f "/usr/local/CyberCP/filemanager/views.py" ]; then
-    sed -i 's/enterprise/True  # enterprise/g' /usr/local/CyberCP/filemanager/views.py
-fi
-
-log "Unlocking Mail Settings..."
-if [ -f "/usr/local/CyberCP/mailServer/views.py" ]; then
-    sed -i 's/enterprise/True  # enterprise/g' /usr/local/CyberCP/mailServer/views.py
-fi
-
-log "Unlocking Email Debugger..."
-if [ -f "/usr/local/CyberCP/emailPremium/views.py" ]; then
-    sed -i 's/enterprise/True  # enterprise/g' /usr/local/CyberCP/emailPremium/views.py
-fi
-
-log "Unlocking Rspamd..."
-if [ -d "/usr/local/CyberCP/mailServer" ]; then
-    find /usr/local/CyberCP/mailServer -type f -name "*.py" -exec sed -i 's/enterprise/True  # enterprise/g' {} \;
-fi
-
-# 3. Remove license verification
-log "Removing license verification system..."
-if [ -f "/usr/local/CyberCP/plogical/CyberCPLogFileWriter.py" ]; then
-    sed -i 's/def checkLicense/def checkLicense_DISABLED/g' /usr/local/CyberCP/plogical/CyberCPLogFileWriter.py
-    sed -i 's/def verifyConn/def verifyConn_DISABLED/g' /usr/local/CyberCP/plogical/CyberCPLogFileWriter.py
-fi
-
-# 4. Patch the template files that show upgrade prompts
-log "Removing upgrade prompts from templates..."
-find /usr/local/CyberCP -type f -name "*.html" -exec sed -i 's/Enterprise Only/Unlocked/g' {} \;
-find /usr/local/CyberCP -type f -name "*.html" -exec sed -i 's/enterprise only/unlocked/g' {} \;
-find /usr/local/CyberCP -type f -name "*.html" -exec sed -i '/upgrade.*enterprise/d' {} \;
-
-success "All enterprise restrictions removed"
 
 # ============================================================================
 # ADD CUSTOM NAS BACKUP TO UI
